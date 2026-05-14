@@ -434,20 +434,60 @@
       // WebRTC check
       checkWebRTC().then(r => setText('webrtc-status', r));
 
-      // Fetch IP data
+      // Fetch IP data with multiple fallback APIs
+      async function fetchIPData() {
+        const apis = [
+          async () => {
+            const r = await fetch('https://ipwho.is/');
+            const d = await r.json();
+            if (!d.ip) throw new Error('No IP');
+            return {
+              ip: d.ip, isp: d.connection?.isp, org: d.connection?.org,
+              city: d.city, region: d.region, country: d.country,
+              flag: d.flag?.emoji || '', lat: d.latitude, lon: d.longitude,
+              tz: d.timezone?.id
+            };
+          },
+          async () => {
+            const r = await fetch('https://ipapi.co/json/');
+            const d = await r.json();
+            if (!d.ip) throw new Error('No IP');
+            return {
+              ip: d.ip, isp: d.org, org: d.org,
+              city: d.city, region: d.region, country: d.country_name,
+              flag: '', lat: d.latitude, lon: d.longitude,
+              tz: d.timezone
+            };
+          },
+          async () => {
+            const r = await fetch('https://ip-api.com/json/?fields=status,message,country,regionName,city,lat,lon,timezone,isp,org,query');
+            const d = await r.json();
+            if (d.status !== 'success') throw new Error('API fail');
+            return {
+              ip: d.query, isp: d.isp, org: d.org,
+              city: d.city, region: d.regionName, country: d.country,
+              flag: '', lat: d.lat, lon: d.lon,
+              tz: d.timezone
+            };
+          }
+        ];
+        for (const apiFn of apis) {
+          try { return await apiFn(); } catch(e) { continue; }
+        }
+        throw new Error('All APIs failed');
+      }
+
       try {
-        const res = await fetch('https://ipwho.is/');
-        if (!res.ok) throw new Error('API error');
-        const d = await res.json();
+        const d = await fetchIPData();
 
         setText('ip-address', d.ip || 'Unknown');
-        setText('isp', d.connection?.isp || 'Unknown');
-        setText('org', d.connection?.org || '—');
+        setText('isp', d.isp || 'Unknown');
+        setText('org', d.org || '—');
         setText('city', d.city || '—');
         setText('region', d.region || '—');
-        setText('country', `${d.country || '—'} ${d.flag?.emoji || ''}`);
-        setText('coords', `${d.latitude?.toFixed(4)}, ${d.longitude?.toFixed(4)}`);
-        setText('ip-tz', d.timezone?.id || '—');
+        setText('country', `${d.country || '—'} ${d.flag || ''}`);
+        setText('coords', `${parseFloat(d.lat).toFixed(4)}, ${parseFloat(d.lon).toFixed(4)}`);
+        setText('ip-tz', d.tz || '—');
 
         // IPv6 check
         fetch('https://api6.ipify.org?format=json')
@@ -456,7 +496,7 @@
           .catch(() => setText('ipv6', 'Not Available'));
 
         // VPN check
-        const ipTz = d.timezone?.id || '';
+        const ipTz = d.tz || '';
         const vpnDetected = ipTz && sysTz && ipTz !== sysTz;
         setText('vpn-status', vpnDetected
           ? '<span class="badge warn">⚠️ Possible VPN/Proxy</span>'
@@ -466,11 +506,11 @@
         const mapEl = document.getElementById('map');
         mapEl.innerHTML = '';
         if (mapInstance) { mapInstance.remove(); mapInstance = null; }
-        mapInstance = L.map('map').setView([d.latitude, d.longitude], 11);
+        mapInstance = L.map('map').setView([d.lat, d.lon], 11);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© OpenStreetMap'
         }).addTo(mapInstance);
-        L.marker([d.latitude, d.longitude])
+        L.marker([d.lat, d.lon])
           .addTo(mapInstance)
           .bindPopup(`📍 ${d.city}, ${d.country}`)
           .openPopup();
@@ -478,12 +518,12 @@
         // Save report data
         Object.assign(reportData, {
           ip: d.ip,
-          isp: d.connection?.isp,
-          org: d.connection?.org,
+          isp: d.isp,
+          org: d.org,
           city: d.city,
           region: d.region,
           country: d.country,
-          coordinates: `${d.latitude}, ${d.longitude}`,
+          coordinates: `${d.lat}, ${d.lon}`,
           ipTimezone: ipTz,
           vpnDetected: vpnDetected ? 'Possible VPN' : 'Clean',
           timestamp: new Date().toLocaleString()
