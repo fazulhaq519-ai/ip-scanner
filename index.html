@@ -434,33 +434,45 @@
       // WebRTC check
       checkWebRTC().then(r => setText('webrtc-status', r));
 
-      // Fetch IP data with multiple fallback APIs
+      // Fetch IP data with multiple CORS-friendly fallback APIs
       async function fetchIPData() {
         const apis = [
           async () => {
-            const r = await fetch('https://ipwho.is/');
+            const r = await fetch('https://ipwho.is/', {mode:'cors'});
             const d = await r.json();
-            if (!d.ip) throw new Error('No IP');
+            if (!d.success || !d.ip) throw new Error('No IP');
             return {
-              ip: d.ip, isp: d.connection?.isp, org: d.connection?.org,
+              ip: d.ip, isp: d.connection?.isp || '—', org: d.connection?.org || '—',
               city: d.city, region: d.region, country: d.country,
               flag: d.flag?.emoji || '', lat: d.latitude, lon: d.longitude,
               tz: d.timezone?.id
             };
           },
           async () => {
-            const r = await fetch('https://ipapi.co/json/');
+            const r = await fetch('https://freeipapi.com/api/json', {mode:'cors'});
+            const d = await r.json();
+            if (!d.ipAddress) throw new Error('No IP');
+            return {
+              ip: d.ipAddress, isp: d.ipVersion || '—', org: '—',
+              city: d.cityName, region: d.regionName, country: d.countryName,
+              flag: d.countryCode || '', lat: d.latitude, lon: d.longitude,
+              tz: d.timeZone
+            };
+          },
+          async () => {
+            const r = await fetch('https://ipinfo.io/json', {mode:'cors'});
             const d = await r.json();
             if (!d.ip) throw new Error('No IP');
+            const [lat, lon] = (d.loc || '0,0').split(',');
             return {
-              ip: d.ip, isp: d.org, org: d.org,
-              city: d.city, region: d.region, country: d.country_name,
-              flag: '', lat: d.latitude, lon: d.longitude,
+              ip: d.ip, isp: d.org || '—', org: d.org || '—',
+              city: d.city, region: d.region, country: d.country,
+              flag: '', lat: parseFloat(lat), lon: parseFloat(lon),
               tz: d.timezone
             };
           },
           async () => {
-            const r = await fetch('https://ip-api.com/json/?fields=status,message,country,regionName,city,lat,lon,timezone,isp,org,query');
+            const r = await fetch('http://ip-api.com/json/?fields=status,country,regionName,city,lat,lon,timezone,isp,org,query', {mode:'cors'});
             const d = await r.json();
             if (d.status !== 'success') throw new Error('API fail');
             return {
@@ -472,7 +484,7 @@
           }
         ];
         for (const apiFn of apis) {
-          try { return await apiFn(); } catch(e) { continue; }
+          try { return await apiFn(); } catch(e) { console.warn('API failed:', e); continue; }
         }
         throw new Error('All APIs failed');
       }
