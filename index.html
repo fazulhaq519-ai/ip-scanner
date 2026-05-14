@@ -339,6 +339,15 @@
       if (el) el.innerHTML = val || '—';
     }
 
+    // Country code to full name
+    const countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    function getCountryName(code, flag) {
+      try {
+        const name = countryNames.of(code);
+        return `${name} ${flag || ''}`;
+      } catch { return `${code} ${flag || ''}`; }
+    }
+
     // Detect browser
     function getBrowser() {
       const ua = navigator.userAgent;
@@ -492,12 +501,14 @@
       try {
         const d = await fetchIPData();
 
+        // Clean ASN prefix from ISP/Org fields
+        const cleanASN = (val) => val ? val.replace(/^AS\d+\s*/i, '') : '—';
         setText('ip-address', d.ip || 'Unknown');
-        setText('isp', d.isp || 'Unknown');
-        setText('org', d.org || '—');
+        setText('isp', cleanASN(d.isp) || 'Unknown');
+        setText('org', cleanASN(d.org) || '—');
         setText('city', d.city || '—');
         setText('region', d.region || '—');
-        setText('country', `${d.country || '—'} ${d.flag || ''}`);
+        setText('country', getCountryName(d.country, d.flag) || '—');
         setText('coords', `${parseFloat(d.lat).toFixed(4)}, ${parseFloat(d.lon).toFixed(4)}`);
         setText('ip-tz', d.tz || '—');
 
