@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pro IP & Privacy Scanner</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+    }
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #0284c7;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+    .dashboard { max-width: 960px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .header h1 { color: var(--accent); font-size: 22px; }
+    .theme-btn {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: 0.2s;
+    }
+    .theme-btn:hover { opacity: 0.8; }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 20px;
+      border-top: 4px solid var(--accent);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+    .card h2 {
+      font-size: 15px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 9px 0;
+      font-size: 14px;
+      gap: 10px;
+    }
+    .data-label { font-weight: 600; color: var(--muted); white-space: nowrap; }
+    .data-value { color: var(--accent); text-align: right; word-break: break-all; }
+
+    /* Big IP */
+    .ip-big {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--green);
+      text-align: center;
+      margin: 12px 0;
+      letter-spacing: 1px;
+    }
+
+    /* Map */
+    #map {
+      height: 220px;
+      border-radius: 10px;
+      margin-top: 12px;
+      z-index: 1;
+    }
+
+    /* VPN badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .badge.safe { background: rgba(16,185,129,0.15); color: var(--green); }
+    .badge.warn { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border) 25%, var(--card) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+      height: 16px;
+      width: 100px;
+      display: inline-block;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Spinner */
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 30px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error */
+    .error-msg {
+      color: var(--red);
+      font-size: 13px;
+      text-align: center;
+      padding: 10px;
+    }
+
+    /* Actions */
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+    .action-btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 13px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .action-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .action-btn.green { background: var(--green); }
+    .action-btn.red { background: var(--red); }
+
+    /* Refresh btn */
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-left: 8px;
+    }
+    .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    @media (max-width: 480px) {
+      .ip-big { font-size: 20px; }
+      .header h1 { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+
+    <div class="header">
+      <h1>🕵️ Pro IP & Privacy Scanner</h1>
+      <div>
+        <button class="theme-btn" onclick="toggleTheme()">🌗 Theme</button>
+        <button class="refresh-btn" onclick="init()">🔄 Refresh</button>
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <!-- IP Card -->
+      <div class="card">
+        <h2>🌐 Your Network Identity</h2>
+        <div class="ip-big" id="ip-address"><div class="spinner"></div></div>
+        <div class="data-row">
+          <span class="data-label">ISP</span>
+          <span class="data-value" id="isp"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Organization</span>
+          <span class="data-value" id="org"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Connection</span>
+          <span class="data-value" id="conn-type"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">IPv6</span>
+          <span class="data-value" id="ipv6"><span class="skeleton"></span></span>
+        </div>
+      </div>
+
+      <!-- Location + Map -->
+      <div class="card">
+        <h2>📍 Geolocation & Map</h2>
+        <div class="data-row">
+          <span class="data-label">City</span>
+          <span class="data-value" id="city"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Region</span>
+          <span class="data-value" id="region"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Country</span>
+          <span class="data-value" id="country"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Coordinates</span>
+          <span class="data-value" id="coords"><span class="skeleton"></span></span>
+        </div>
+        <div id="map"><div class="spinner"></div></div>
+      </div>
+
+      <!-- VPN / Privacy -->
+      <div class="card">
+        <h2>🛡️ Privacy & VPN Check</h2>
+        <div class="data-row">
+          <span class="data-label">IP Timezone</span>
+          <span class="data-value" id="ip-tz"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">System Timezone</span>
+          <span class="data-value" id="sys-tz">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">VPN/Proxy</span>
+          <span class="data-value" id="vpn-status"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">WebRTC Leak</span>
+          <span class="data-value" id="webrtc-status"><span class="skeleton"></span></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Do Not Track</span>
+          <span class="data-value" id="dnt">—</span>
+        </div>
+      </div>
+
+      <!-- Hardware Fingerprint -->
+      <div class="card">
+        <h2>💻 Device Fingerprint</h2>
+        <div class="data-row">
+          <span class="data-label">Browser</span>
+          <span class="data-value" id="browser">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">OS</span>
+          <span class="data-value" id="os">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">CPU Cores</span>
+          <span class="data-value" id="cpu">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">RAM (approx)</span>
+          <span class="data-value" id="ram">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Screen</span>
+          <span class="data-value" id="screen">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Battery</span>
+          <span class="data-value" id="battery">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Language</span>
+          <span class="data-value" id="lang">—</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Cookies</span>
+          <span class="data-value" id="cookies">—</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="actions">
+      <button class="action-btn" onclick="copyData()">📋 Copy Report</button>
+      <button class="action-btn green" onclick="downloadReport()">📥 Download TXT</button>
+      <button class="action-btn red" onclick="downloadJSON()">📦 Download JSON</button>
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let reportData = {};
+    let mapInstance = null;
+
+    // Theme
+    function toggleTheme() {
+      document.body.getAttribute('data-theme') === 'light'
+        ? document.body.removeAttribute('data-theme')
+        : document.body.setAttribute('data-theme', 'light');
+    }
+
+    // Set text helper
+    function setText(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = val || '—';
+    }
+
+    // Detect browser
+    function getBrowser() {
+      const ua = navigator.userAgent;
+      if (ua.includes('Edg')) return 'Microsoft Edge';
+      if (ua.includes('OPR') || ua.includes('Opera')) return 'Opera';
+      if (ua.includes('Chrome')) return 'Chrome';
+      if (ua.includes('Firefox')) return 'Firefox';
+      if (ua.includes('Safari')) return 'Safari';
+      return 'Unknown';
+    }
+
+    // Detect OS
+    function getOS() {
+      const ua = navigator.userAgent;
+      if (ua.includes('Windows')) return 'Windows';
+      if (ua.includes('Mac')) return 'macOS';
+      if (ua.includes('Android')) return 'Android';
+      if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
+      if (ua.includes('Linux')) return 'Linux';
+      return navigator.platform || 'Unknown';
+    }
+
+    // WebRTC local IP leak check
+    function checkWebRTC() {
+      return new Promise((resolve) => {
+        try {
+          const pc = new RTCPeerConnection({ iceServers: [] });
+          pc.createDataChannel('');
+          pc.createOffer().then(o => pc.setLocalDescription(o));
+          pc.onicecandidate = (e) => {
+            if (!e.candidate) return;
+            const match = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+            if (match) {
+              const ip = match[1];
+              pc.close();
+              resolve(ip.startsWith('192.') || ip.startsWith('10.') || ip.startsWith('172.')
+                ? `<span class="badge warn">⚠️ Local IP: ${ip}</span>`
+                : `<span class="badge safe">✅ No Leak</span>`);
+            }
+          };
+          setTimeout(() => resolve('<span class="badge safe">✅ No Leak</span>'), 2000);
+        } catch {
+          resolve('<span class="badge safe">✅ No Leak</span>');
+        }
+      });
+    }
+
+    // Fill device info
+    function fillDevice() {
+      setText('browser', getBrowser());
+      setText('os', getOS());
+      setText('cpu', navigator.hardwareConcurrency ? navigator.hardwareConcurrency + ' Cores' : 'Unknown');
+      setText('ram', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Unknown');
+      setText('screen', `${screen.width}×${screen.height}`);
+      setText('lang', navigator.language || 'Unknown');
+      setText('cookies', navigator.cookieEnabled ? '✅ Enabled' : '❌ Disabled');
+      setText('dnt', navigator.doNotTrack === '1' ? '✅ Enabled' : '❌ Disabled');
+
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      setText('conn-type', conn ? conn.effectiveType.toUpperCase() : 'Unknown');
+
+      if ('getBattery' in navigator) {
+        navigator.getBattery().then(b => {
+          const lvl = Math.round(b.level * 100) + '%';
+          const ch = b.charging ? ' ⚡ Charging' : '';
+          setText('battery', lvl + ch);
+          reportData.battery = lvl + ch;
+        });
+      } else {
+        setText('battery', 'Not Supported');
+      }
+
+      reportData.browser = getBrowser();
+      reportData.os = getOS();
+      reportData.cpu = navigator.hardwareConcurrency + ' Cores';
+      reportData.screen = `${screen.width}×${screen.height}`;
+      reportData.lang = navigator.language;
+    }
+
+    // Main init
+    async function init() {
+      setText('ip-address', '<div class="spinner"></div>');
+      reportData = {};
+
+      // Device info (instant)
+      fillDevice();
+
+      // System timezone
+      const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setText('sys-tz', sysTz);
+      reportData.systemTimezone = sysTz;
+
+      // WebRTC check
+      checkWebRTC().then(r => setText('webrtc-status', r));
+
+      // Fetch IP data
+      try {
+        const res = await fetch('https://ipwho.is/');
+        if (!res.ok) throw new Error('API error');
+        const d = await res.json();
+
+        setText('ip-address', d.ip || 'Unknown');
+        setText('isp', d.connection?.isp || 'Unknown');
+        setText('org', d.connection?.org || '—');
+        setText('city', d.city || '—');
+        setText('region', d.region || '—');
+        setText('country', `${d.country || '—'} ${d.flag?.emoji || ''}`);
+        setText('coords', `${d.latitude?.toFixed(4)}, ${d.longitude?.toFixed(4)}`);
+        setText('ip-tz', d.timezone?.id || '—');
+
+        // IPv6 check
+        fetch('https://api6.ipify.org?format=json')
+          .then(r => r.json())
+          .then(r => setText('ipv6', r.ip || 'Not Available'))
+          .catch(() => setText('ipv6', 'Not Available'));
+
+        // VPN check
+        const ipTz = d.timezone?.id || '';
+        const vpnDetected = ipTz && sysTz && ipTz !== sysTz;
+        setText('vpn-status', vpnDetected
+          ? '<span class="badge warn">⚠️ Possible VPN/Proxy</span>'
+          : '<span class="badge safe">✅ Clean</span>');
+
+        // Map
+        const mapEl = document.getElementById('map');
+        mapEl.innerHTML = '';
+        if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+        mapInstance = L.map('map').setView([d.latitude, d.longitude], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap'
+        }).addTo(mapInstance);
+        L.marker([d.latitude, d.longitude])
+          .addTo(mapInstance)
+          .bindPopup(`📍 ${d.city}, ${d.country}`)
+          .openPopup();
+
+        // Save report data
+        Object.assign(reportData, {
+          ip: d.ip,
+          isp: d.connection?.isp,
+          org: d.connection?.org,
+          city: d.city,
+          region: d.region,
+          country: d.country,
+          coordinates: `${d.latitude}, ${d.longitude}`,
+          ipTimezone: ipTz,
+          vpnDetected: vpnDetected ? 'Possible VPN' : 'Clean',
+          timestamp: new Date().toLocaleString()
+        });
+
+      } catch (err) {
+        setText('ip-address', '<span class="error-msg">❌ Failed to load IP data.<br>Check your connection.</span>');
+        console.error(err);
+      }
+    }
+
+    // Copy
+    function copyData() {
+      const txt = Object.entries(reportData).map(([k,v]) => `${k}: ${v}`).join('\n');
+      navigator.clipboard.writeText(txt).then(() => alert('✅ Copied to clipboard!'));
+    }
+
+    // Download TXT
+    function downloadReport() {
+      const txt = '--- Pro IP & Privacy Report ---\n' +
+        Object.entries(reportData).map(([k,v]) => `${k}: ${v}`).join('\n');
+      const blob = new Blob([txt], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'IP_Report.txt';
+      a.click();
+    }
+
+    // Download JSON
+    function downloadJSON() {
+      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'IP_Report.json';
+      a.click();
+    }
+
+    // Start
+    init();
+  </script>
+</body>
+</html>
